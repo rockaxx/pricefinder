@@ -1,0 +1,18 @@
+{
+  "merchant": "Alza.sk",
+  "source": "https://www.alza.sk/gaming/playstation-5/18872471.htm?evt=re&exps=ps5",
+  "mode": "supplied-html",
+  "observedAt": null,
+  "products": [
+    {
+      "code": "MSX0052nad",
+      "productId": "8566784",
+      "name": "PlayStation 5 (Slim) – 1TB (s mechanikou)",
+      "url": "https://www.alza.sk/gaming/playstation-5-slim-1tb-s-mechanikou-d8566784.htm",
+      "priceCents": 71990,
+      "currency": "EUR",
+      "priceLabel": null,
+      "availability": "Skladom podľa variantu"
+    }
+  ]
+}

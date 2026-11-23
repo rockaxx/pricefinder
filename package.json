@@ -1,0 +1,73 @@
+{
+  "name": "pricefinder",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed": "tsx prisma/seed.ts",
+    "setup": "tsx scripts/setup.ts",
+    "alerts": "tsx scripts/alerts.ts",
+    "sync:catalog": "tsx scripts/sync-catalog.ts",
+    "scrape:alza": "tsx scripts/scrape-alza.ts",
+    "local:alza": "tsx scripts/use-local-alza-snapshot.ts",
+    "local:import": "tsx scripts/import-local-listings.ts",
+    "e2e": "tsx scripts/e2e.ts",
+    "postinstall": "prisma generate"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.2.0",
+    "@crawlee/core": "^3.18.2",
+    "@crawlee/http": "^3.18.2",
+    "@prisma/client": "^6.19.3",
+    "cheerio": "^1.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "csv-parse": "^7.0.3",
+    "dotenv": "^17.4.2",
+    "fast-xml-parser": "^5.12.1",
+    "ipaddr.js": "^2.5.0",
+    "lucide-react": "^0.577.0",
+    "next": "^16.4.6",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^10.6.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.11.0",
+    "tailwind-merge": "^3.5.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.4.6",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "effect": "3.22.5",
+      "deepmerge-ts": "8.0.2"
+    },
+    "@crawlee/core": {
+      "minimatch": "11.0.9"
+    }
+  }
+}

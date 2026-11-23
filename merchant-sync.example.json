@@ -1,0 +1,14 @@
+{
+  "www-obchod-example-xml": {
+    "mode": "feed",
+    "authorized": true,
+    "format": "xml",
+    "url": "https://feeds.example.com/schvaleny-katalog.xml"
+  },
+  "www-obchod-example-csv": {
+    "mode": "pages",
+    "authorized": true,
+    "urls": ["https://www.obchod.example/produkty/konzola"],
+    "includeImages": false
+  }
+}

@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+model Category {
+  id       String @id
+  name     String
+  products Product[]
+}
+model Product {
+  id         String @id
+  name       String
+  brand      String
+  model      String
+  variant    String
+  storage    String?
+  gtin       String? @unique
+  images     Json
+  specs      Json
+  demo       Boolean @default(false)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  offers     Offer[]
+  alerts     PriceAlert[]
+  @@index([categoryId, brand])
+}
+model Merchant {
+  id          String @id
+  name        String
+  host        String?
+  affiliate   String?
+  offers      Offer[]
+  sources     DataSource[]
+}
+model DataSource {
+  id          String @id
+  name        String
+  kind        String
+  enabled     Boolean @default(false)
+  demo        Boolean @default(false)
+  updatedAt   DateTime?
+  merchantId  String?
+  merchant    Merchant? @relation(fields: [merchantId], references: [id])
+  offers      Offer[]
+  jobs        ImportJob[]
+}
+model ImportJob {
+  id          String @id @default(cuid())
+  sourceId    String
+  source      DataSource @relation(fields: [sourceId], references: [id])
+  createdAt   DateTime @default(now())
+  status      String
+  count       Int @default(0)
+  error       String?
+}
+model Offer {
+  id           String @id @default(cuid())
+  externalId   String
+  sourceId     String
+  source       DataSource @relation(fields: [sourceId], references: [id])
+  merchantId   String
+  merchant     Merchant @relation(fields: [merchantId], references: [id])
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id])
+  title        String
+  listing      Json?
+  url          String
+  price        Int
+  shipping     Int?
+  currency     String @default("EUR")
+  condition    String
+  availability String
+  confidence   Int @default(0)
+  reviewed     Boolean @default(false)
+  sponsored    Boolean @default(false)
+  sellerType   String?
+  location     String?
+  listedAt     DateTime?
+  updatedAt    DateTime @default(now())
+  history      PriceHistory[]
+  clicks       OutboundClick[]
+  @@unique([sourceId, externalId])
+  @@index([productId, condition, price])
+}
+model PriceHistory {
+  id        String @id @default(cuid())
+  offerId   String
+  offer     Offer @relation(fields: [offerId], references: [id])
+  price     Int
+  shipping  Int?
+  observed  DateTime @default(now())
+  @@index([offerId, observed])
+}
+model PriceAlert {
+  id          String @id @default(cuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  email       String
+  target      Int
+  createdAt   DateTime @default(now())
+  notifiedAt  DateTime?
+  processing  DateTime?
+  channel     String?
+  @@unique([productId, email, target])
+}
+model OutboundClick {
+  id        String @id @default(cuid())
+  offerId   String
+  offer     Offer @relation(fields: [offerId], references: [id])
+  createdAt DateTime @default(now())
+}
+model LiveSearchRequest {
+  id       Int    @id @default(autoincrement())
+  provider String
+  queryKey String
+  atMs     BigInt
+  @@index([provider, atMs])
+  @@index([provider, queryKey, atMs])
+}
+model LiveListingCache {
+  provider   String
+  externalId String
+  atMs       BigInt
+  payload    String
+  @@id([provider, externalId])
+  @@index([provider, atMs])
+}
+
