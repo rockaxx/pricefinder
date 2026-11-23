@@ -129,3 +129,12 @@ model LiveListingCache {
   @@index([provider, atMs])
 }
 
+model LiveSearchCache {
+  provider String
+  queryKey String
+  atMs     BigInt
+  payload  String
+  @@id([provider, queryKey])
+  @@index([provider, atMs])
+}
+

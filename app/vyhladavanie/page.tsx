@@ -1,4 +1,4 @@
-import { Results, type Query } from '../../components/results'
+import { Results, clean, type Query } from '../../components/results'
 import { LocalSearch } from '../../components/local-search'
 import { localSearchMode } from '../../lib/local-search-mode'
 export const dynamic = 'force-dynamic'
@@ -13,11 +13,12 @@ export default async function Page({
   searchParams: Promise<Query>
 }) {
   const params = await searchParams
-  if (localSearchMode())
+  if (localSearchMode() || process.env.BAZOS_SEARCH_ENDPOINT?.trim())
     return (
       <LocalSearch
         query={typeof params.q === 'string' ? params.q : ''}
-        page={Number.parseInt(String(params.page ?? ''), 10)}
+        page={Number.parseInt(String(params.page ?? params.offersPage ?? ''), 10)}
+        filters={clean(params)}
       />
     )
   return <Results query={params} />

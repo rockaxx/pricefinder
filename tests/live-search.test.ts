@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { makeLiveSearch } from '../lib/live-search'
 import { CatalogHttpError } from '../lib/catalog-http'
+import type { LocalListing } from '../lib/local-listings'
 
 const settings = {
   bazos: {
@@ -128,6 +129,41 @@ describe('live HTML search', () => {
       vi.advanceTimersByTime(86400000)
       expect((await search('PS5'))[0].status).toBe('live')
       expect(read).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reuses persisted query results after restart without consuming a request', async () => {
+    vi.useFakeTimers()
+    try {
+      let stored: { rows: LocalListing[]; expires: number } | null = null
+      const cache = {
+        get: vi.fn(async (_provider: string, _key: string, now: number) =>
+          stored && stored.expires > now ? stored : null,
+        ),
+        set: vi.fn(async (
+          _provider: string, _key: string, rows: LocalListing[], now: number,
+        ) => {
+          stored = { rows, expires: now + settings.bazos.refreshMs }
+        }),
+      }
+      const read = vi.fn(async () => html)
+      const reserve = vi.fn(async () => true)
+      const first = makeLiveSearch(settings, read, reserve, undefined, cache)
+      expect((await first('PS5'))[0].status).toBe('live')
+      vi.advanceTimersByTime(1800000)
+      reserve.mockResolvedValue(false)
+      const restarted = makeLiveSearch(settings, read, reserve, undefined, cache)
+      expect((await restarted('ps5'))[0]).toMatchObject({
+        status: 'live', rows: [{ name: 'PlayStation 5' }],
+      })
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(reserve).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(1800001)
+      reserve.mockResolvedValue(true)
+      expect((await restarted('ps5'))[0].status).toBe('live')
+      expect(read).toHaveBeenCalledTimes(2)
     } finally {
       vi.useRealTimers()
     }

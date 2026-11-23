@@ -12,8 +12,6 @@ export type LocalListing = {
 }
 
 export function providerSearchLinks(query: string) {
-  const alza = new URL('/search.htm', 'https://www.alza.sk')
-  alza.searchParams.set('exps', query)
   const bazos = new URL('/search.php', 'https://www.bazos.sk')
   bazos.search = new URLSearchParams({
     hledat: query,
@@ -26,7 +24,6 @@ export function providerSearchLinks(query: string) {
     kitx: 'ano',
   }).toString()
   return [
-    { name: 'Alza.sk', url: alza.href },
     { name: 'Bazoš.sk', url: bazos.href },
   ]
 }

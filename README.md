@@ -18,6 +18,13 @@ On PowerShell use `Copy-Item .env.example .env` instead of `cp`. Open [http://lo
 
 ## Admin and merchant feeds
 
+With `BAZOS_SEARCH_ENDPOINT` configured, the search page displays Bazoš offers
+in one results grid beside the filters. Price limits and ascending/descending
+price sorting apply to those listings, including pagination. Alza live search
+and its search links are disabled for now. There is no separate empty catalog
+below the listings. Without a Bazoš endpoint or local search mode, the catalog
+search remains available for imported products and demo data.
+
 For a compact localhost search with name, price and optional photo, set
 `LOCAL_SIMPLE_SEARCH=1` in `.env` and start Next.js on `127.0.0.1`.
 Saved HTML results can contain multiple items from any search topic:
@@ -28,25 +35,28 @@ npm run local:import -- bazos "bazos-results.html"
 ```
 
 The import saves only listing fields and adds or updates rows by source ID. Demo
-sources are disabled. The local search ranks all imported listings and its two
-external links open the same query directly on Alza and Bazoš.
+sources are disabled. The Bazoš search ranks imported Bazoš listings and its
+external link opens the same query directly on Bazoš. Legacy Alza import
+utilities remain separate.
 
-For live HTML search, set the approved HTTPS URL, name of its query parameter,
-and agreed minimum interval between requests in milliseconds for each source
-(`ALZA_SEARCH_ENDPOINT`, `ALZA_SEARCH_QUERY_PARAM`, `ALZA_SEARCH_INTERVAL_MS`
-and equivalent `BAZOS_*` variables). With any required field missing, that
-source stays disabled. Use only the endpoint approved for this integration.
-Set `ALZA_SEARCH_IMAGES_ALLOWED=1` or `BAZOS_SEARCH_IMAGES_ALLOWED=1`
-when the corresponding approval includes product images.
-The localhost process applies the limits per source, reuses recently fetched
+For live HTML search, copy the source settings from `.env.example` into `.env`
+and restart the server. The example includes the public Bazoš search URL,
+its query parameter, and a two-second minimum request interval
+(`BAZOS_SEARCH_ENDPOINT`, `BAZOS_SEARCH_QUERY_PARAM`, `BAZOS_SEARCH_INTERVAL_MS`).
+With any required field missing, that source stays disabled. Adjust endpoints
+and limits to your integration terms. `BAZOS_SEARCH_IMAGES_ALLOWED=1` enables
+the source's listing photos; the example enables them. Alza is not included
+in the active live-search configuration.
+The server applies the limits per source, reuses recently fetched
 results, does not follow redirects, and displays only listing names, prices,
 source links and any price condition. Locally saved listings are clearly
 labeled and remain available when the live source is unavailable.
-The proposal's caps are enforced per source in rolling windows, with Alza at
-50/minute and 1,000/24 hours and Bazoš at 60/minute and 300/24 hours.
+Bazoš request caps are enforced in rolling windows at 60/minute and 300/24 hours.
 Requests for the same normalized search term and updates to an existing
 listing's displayed data are limited to once per hour. The SQLite records
 preserve these limits across restarts. Install the migration with `npm run setup`.
+Successful query results also persist in SQLite for the refresh window, so a
+server restart can reuse the results without consuming another source request.
 With permission for unlimited Bazoš requests, set `BAZOS_SEARCH_UNLIMITED=1`
 to disable its local request quotas and hourly refresh window.
 
@@ -120,6 +130,12 @@ Primary research includes [Heureka’s Slovak category](https://herne-konzoly.he
 - Prisma and SQLite store products, categories, merchants, offers, observations, sources, jobs, alerts and privacy-conscious outbound counts. Prices are integer euro cents. PostgreSQL migration requires changing the datasource provider, generating a PostgreSQL migration, and copying data.
 - `lib/domain.ts` implements price representation, ranking and deterministic identity matching. `lib/importer.ts` defines the connector contract and import transaction. `lib/alerts.ts` evaluates alerts and selects the notification adapter. `app/admin/` handles protected imports and match review.
 - `npm run typecheck`, `npm run lint`, `npm test` and `npm run build` exercise the code and build. Run `npx playwright install chromium` before `npm run e2e`. Browser tests use port 3001 and an isolated temporary database.
+
+If Windows reserves ports 3000/3001 (`listen EACCES`), run
+`npm run dev -- --port 3100` and open `http://localhost:3100`.
+Set `SITE_URL=http://localhost:3100` in `.env` for that instance.
+For browser tests, choose a free port with `PRICEFINDER_E2E_PORT` (PowerShell:
+`$env:PRICEFINDER_E2E_PORT='3101'; npm run e2e`).
 
 Before production, set the canonical HTTPS domain, replace draft legal/contact pages with operator details, configure approved partnerships, add scheduled imports and freshness thresholds, confirm affiliate link contracts, plan backups and monitoring, and move shared rate limits upstream for multi-instance deployment. Search currently ranks a small database-backed candidate set in memory. At larger scale, add a normalized search index and database-level candidate pagination.
 

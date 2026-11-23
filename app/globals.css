@@ -707,6 +707,9 @@ select {
 .art:has(img) {
   background: #eeedfb;
 }
+.listing-results {
+  margin: 2rem 0;
+}
 .art img {
   max-height: 175px;
   object-fit: contain;

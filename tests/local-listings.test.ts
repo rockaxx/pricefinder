@@ -25,8 +25,9 @@ describe('local Bazoš and Alza search', () => {
     ).toEqual([])
   })
   it('keeps arbitrary text in the search parameter', () => {
-    const [alza, bazos] = providerSearchLinks('iPhone & MacBook')
-    expect(new URL(alza.url).searchParams.get('exps')).toBe('iPhone & MacBook')
+    const [bazos] = providerSearchLinks('iPhone & MacBook')
+    expect(providerSearchLinks('test')).toHaveLength(1)
+    expect(bazos.name).toBe('Bazoš.sk')
     expect(new URL(bazos.url).searchParams.get('hledat')).toBe(
       'iPhone & MacBook',
     )

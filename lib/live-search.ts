@@ -34,6 +34,20 @@ type Retain = (
   now: number,
   refreshMs: number,
 ) => Promise<LocalListing[]>
+type ResultCache = {
+  get: (
+    provider: Provider,
+    queryKey: string,
+    now: number,
+    refreshMs: number,
+  ) => Promise<{ rows: LocalListing[]; expires: number } | null>
+  set: (
+    provider: Provider,
+    queryKey: string,
+    rows: LocalListing[],
+    now: number,
+  ) => Promise<void>
+}
 const hour = 3_600_000
 const day = 86_400_000
 type Result = {
@@ -67,6 +81,7 @@ export function makeLiveSearch(
   read = readCatalogUrl,
   reserve?: Reserve,
   retain?: Retain,
+  persisted?: ResultCache,
 ) {
   const sources = providers.flatMap((provider) => {
     const parsed = schema.safeParse(config[provider])
@@ -107,24 +122,41 @@ export function makeLiveSearch(
         const queryKey = query.toLowerCase().replace(/\s+/g, ' ')
         const cached = cache.get(queryKey)
         if (cached && cached.expires > now) return cached.result
-        if (source.blockedUntil > now)
-          return { provider, status: 'blocked', rows: [] }
-        if (!settings.unlimited) {
-          source.sent = source.sent.filter((time) => time > now - day)
-          if (
-            source.nextRequest > now ||
-            source.sent.length >= settings.maxPerDay ||
-            source.sent.filter((time) => time > now - 60_000).length >=
-              settings.maxPerMinute
-          )
-            return { provider, status: 'limited', rows: [] }
-          source.nextRequest = now + settings.minIntervalMs
-          source.sent.push(now)
-        }
         const url = new URL(source.endpoint)
         url.searchParams.set(settings.queryParam, query)
         const result = (async (): Promise<Result> => {
           try {
+            if (!settings.unlimited && persisted) {
+              const stored = await persisted.get(
+                provider, queryKey, now, settings.refreshMs,
+              )
+              if (stored) {
+                const entry = cache.get(queryKey)
+                if (entry) entry.expires = Math.min(entry.expires, stored.expires)
+                return {
+                  provider,
+                  status: 'live',
+                  rows: stored.rows.map((row) => ({
+                    ...row,
+                    image: settings.imagesAllowed ? row.image : null,
+                  })),
+                }
+              }
+            }
+            if (source.blockedUntil > now)
+              return { provider, status: 'blocked', rows: [] }
+            if (!settings.unlimited) {
+              source.sent = source.sent.filter((time) => time > now - day)
+              if (
+                source.nextRequest > now ||
+                source.sent.length >= settings.maxPerDay ||
+                source.sent.filter((time) => time > now - 60_000).length >=
+                  settings.maxPerMinute
+              )
+                return { provider, status: 'limited', rows: [] }
+              source.nextRequest = now + settings.minIntervalMs
+              source.sent.push(now)
+            }
             if (
               !settings.unlimited &&
               reserve &&
@@ -150,6 +182,8 @@ export function makeLiveSearch(
               !settings.unlimited && retain && rows.length
                 ? await retain(provider, rows, now, settings.refreshMs)
                 : rows
+            if (!settings.unlimited && persisted && observed.length)
+              await persisted.set(provider, queryKey, observed, now)
             return {
               provider,
               status: rows.length ? 'live' : 'unavailable',
@@ -164,7 +198,11 @@ export function makeLiveSearch(
             }
             return { provider, status: 'unavailable', rows: [] }
           }
-        })().finally(() => {
+        })().then((result) => {
+          if (result.status === 'limited' || result.status === 'unavailable')
+            cache.delete(queryKey)
+          return result
+        }).finally(() => {
           if (settings.unlimited) cache.delete(queryKey)
         })
         for (const [key, value] of cache)
@@ -258,12 +296,39 @@ export const retainListings: Retain = async (
   })
 }
 
+export const resultCache: ResultCache = {
+  async get(provider, queryKey, now, refreshMs) {
+    const key = createHash('sha256').update(queryKey).digest('hex')
+    const stored = await db.$queryRaw<{ payload: string; atMs: bigint }[]>`
+      SELECT "payload", "atMs" FROM "LiveSearchCache"
+      WHERE "provider" = ${provider} AND "queryKey" = ${key}
+        AND "atMs" > ${BigInt(now - refreshMs)}
+    `
+    return stored.length
+      ? {
+          rows: JSON.parse(stored[0].payload) as LocalListing[],
+          expires: Number(stored[0].atMs) + refreshMs,
+        }
+      : null
+  },
+  async set(provider, queryKey, rows, now) {
+    const key = createHash('sha256').update(queryKey).digest('hex')
+    await db.$executeRaw`DELETE FROM "LiveSearchCache" WHERE "provider" = ${provider} AND "atMs" <= ${BigInt(now - hour)}`
+    await db.$executeRaw`
+      INSERT INTO "LiveSearchCache" ("provider", "queryKey", "atMs", "payload")
+      VALUES (${provider}, ${key}, ${BigInt(now)}, ${JSON.stringify(rows)})
+      ON CONFLICT ("provider", "queryKey") DO UPDATE
+        SET "atMs" = excluded."atMs", "payload" = excluded."payload"
+    `
+  },
+}
+
 export const liveSearch = makeLiveSearch(
   {
-    alza: settings('ALZA', 50, 1000),
     bazos: settings('BAZOS', 60, 300),
   },
   readCatalogUrl,
   reserveRequest,
   retainListings,
+  resultCache,
 )

@@ -3,7 +3,7 @@ import { db } from '../lib/db'
 import { evaluateAlerts } from '../lib/alerts'
 import { importFeed } from '../lib/importer'
 import { connectorFor, merchantSyncConfig } from '../lib/remote-catalog'
-import { reserveRequest, retainListings } from '../lib/live-search'
+import { reserveRequest, retainListings, resultCache } from '../lib/live-search'
 const id = 'sony-playstation-5-slim-disc-1tb'
 test('search, filter, compare, follow a merchant link, and create a price alert', async ({
   page,
@@ -202,8 +202,8 @@ test('SQLite keeps live search limits and the hourly listing price window', asyn
   const limits = {
     endpoint: 'https://www.bazos.sk/search.php',
     queryParam: 'hledat',
-    maxPerDay: 50000,
-    maxPerMinute: 10000,
+    maxPerDay: 2,
+    maxPerMinute: 1,
     minIntervalMs: 1000,
     refreshMs: 3600000,
   }
@@ -234,6 +234,11 @@ test('SQLite keeps live search limits and the hourly listing price window', asyn
   expect(await observePrice(1000, 0)).toBe(1000)
   expect(await observePrice(1200, 2000)).toBe(1000)
   expect(await observePrice(1200, 3601000)).toBe(1200)
+  await resultCache.set('bazos', 'cached-query', [row], now)
+  expect(await resultCache.get('bazos', 'cached-query', now + 1000, 3600000))
+    .toEqual({ rows: [row], expires: now + 3600000 })
+  expect(await resultCache.get('bazos', 'cached-query', now + 3600000, 3600000))
+    .toBeNull()
 })
 test.afterAll(async () => {
   await db.$disconnect()
