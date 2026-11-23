@@ -16,6 +16,8 @@ export default defineConfig({
       LOCAL_SIMPLE_SEARCH: '0',
       ALZA_SEARCH_ENDPOINT: '',
       BAZOS_SEARCH_ENDPOINT: '',
+      RETAIL_SEARCH_PROVIDERS: '',
+      LISTING_MODEL_PORT: '',
     },
   },
 })

@@ -3,15 +3,21 @@ import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { db } from './db'
 import { CatalogHttpError, sourceUrl, readCatalogUrl } from './catalog-http'
+import { readSearchUrl } from './search-http'
+import { enabledShopSources, shopSources } from './shop-sources'
+import { extractShopListings, isEmptyShopSearch } from './shop-listings'
 import {
   extractBazosListings,
   extractLocalAlzaListings,
   type LocalListing,
 } from './local-listings'
 
-const providers = ['alza', 'bazos'] as const
-type Provider = (typeof providers)[number]
-export const liveProviderName = { alza: 'Alza.sk', bazos: 'Bazoš.sk' }
+const providers = ['alza', 'bazos', ...shopSources.map((shop) => shop.id)]
+type Provider = string
+export const liveProviderName: Record<string, string> = {
+  alza: 'Alza.sk', bazos: 'Bazoš.sk',
+  ...Object.fromEntries(shopSources.map((shop) => [shop.id, shop.name])),
+}
 type Settings = {
   endpoint: string
   queryParam: string
@@ -50,11 +56,12 @@ type ResultCache = {
 }
 const hour = 3_600_000
 const day = 86_400_000
-type Result = {
+export type LiveSearchResult = {
   provider: Provider
-  status: 'live' | 'limited' | 'unavailable' | 'blocked'
+  status: 'live' | 'empty' | 'limited' | 'unavailable' | 'blocked'
   rows: LocalListing[]
 }
+type Result = LiveSearchResult
 
 const schema = z.object({
   endpoint: z.string().max(2048).url(),
@@ -70,6 +77,8 @@ const schema = z.object({
   unlimited: z.boolean().optional(),
 })
 const validHost = (host: string, provider: Provider) => {
+  const shop = shopSources.find((shop) => shop.id === provider)
+  if (shop) return host.replace(/^www\./, '') === new URL(shop.endpoint).hostname.replace(/^www\./, '')
   const domain = provider + '.sk'
   return provider === 'alza'
     ? host === 'www.alza.sk'
@@ -112,109 +121,121 @@ export function makeLiveSearch(
     }
   })
 
-  return async (raw: string): Promise<Result[]> => {
+  function requests(raw: string) {
     const query = raw.trim().slice(0, 100)
     if (!query) return []
-    return Promise.all(
-      sources.map((source) => {
-        const { provider, settings, cache } = source
-        const now = Date.now()
-        const queryKey = query.toLowerCase().replace(/\s+/g, ' ')
-        const cached = cache.get(queryKey)
-        if (cached && cached.expires > now) return cached.result
-        const url = new URL(source.endpoint)
-        url.searchParams.set(settings.queryParam, query)
-        const result = (async (): Promise<Result> => {
-          try {
-            if (!settings.unlimited && persisted) {
-              const stored = await persisted.get(
-                provider, queryKey, now, settings.refreshMs,
-              )
-              if (stored) {
-                const entry = cache.get(queryKey)
-                if (entry) entry.expires = Math.min(entry.expires, stored.expires)
-                return {
-                  provider,
-                  status: 'live',
-                  rows: stored.rows.map((row) => ({
-                    ...row,
-                    image: settings.imagesAllowed ? row.image : null,
-                  })),
-                }
-              }
-            }
-            if (source.blockedUntil > now)
-              return { provider, status: 'blocked', rows: [] }
-            if (!settings.unlimited) {
-              source.sent = source.sent.filter((time) => time > now - day)
-              if (
-                source.nextRequest > now ||
-                source.sent.length >= settings.maxPerDay ||
-                source.sent.filter((time) => time > now - 60_000).length >=
-                  settings.maxPerMinute
-              )
-                return { provider, status: 'limited', rows: [] }
-              source.nextRequest = now + settings.minIntervalMs
-              source.sent.push(now)
-            }
-            if (
-              !settings.unlimited &&
-              reserve &&
-              !(await reserve(provider, queryKey, now, settings))
-            ) {
-              cache.delete(queryKey)
-              source.sent = source.sent.filter((time) => time !== now)
-              return { provider, status: 'limited', rows: [] }
-            }
-            const html = await read(url, 'text/html,application/xhtml+xml')
-            const parse =
-              provider === 'alza'
-                ? extractLocalAlzaListings
-                : extractBazosListings
-            // Without a supported result card, the response may be an error page.
-            const rows = parse(html)
-              .slice(0, 60)
-              .map((row) => ({
-                ...row,
-                image: settings.imagesAllowed ? row.image : null,
-              }))
-            const observed =
-              !settings.unlimited && retain && rows.length
-                ? await retain(provider, rows, now, settings.refreshMs)
-                : rows
-            if (!settings.unlimited && persisted && observed.length)
-              await persisted.set(provider, queryKey, observed, now)
+    return sources.map((source) => ({
+      provider: source.provider,
+      result: run(source, query),
+    }))
+  }
+
+  async function run(source: (typeof sources)[number], query: string): Promise<Result> {
+    const { provider, settings, cache } = source
+    const now = Date.now()
+    const normalizedQuery = query.toLowerCase().replace(/\s+/g, ' ')
+    // Older Bazoš results lack the description used for intent detection.
+    const queryKey = provider === 'bazos' ? 'description:v1\0' + normalizedQuery : normalizedQuery
+    const cached = cache.get(queryKey)
+    if (cached && cached.expires > now) return cached.result
+    const url = new URL(source.endpoint)
+    url.searchParams.set(settings.queryParam, query)
+    const result = (async (): Promise<Result> => {
+      try {
+        if (!settings.unlimited && persisted) {
+          const stored = await persisted.get(
+            provider, queryKey, now, settings.refreshMs,
+          )
+          if (stored) {
+            const entry = cache.get(queryKey)
+            if (entry) entry.expires = Math.min(entry.expires, stored.expires)
             return {
               provider,
-              status: rows.length ? 'live' : 'unavailable',
-              rows: settings.imagesAllowed
-                ? observed
-                : observed.map((row) => ({ ...row, image: null })),
+              status: stored.rows.length ? 'live' : 'empty',
+              rows: stored.rows.map((row) => ({
+                ...row,
+                image: settings.imagesAllowed ? row.image : null,
+              })),
             }
-          } catch (error) {
-            if (error instanceof CatalogHttpError && error.status === 403) {
-              source.blockedUntil = Date.now() + settings.refreshMs
-              return { provider, status: 'blocked', rows: [] }
-            }
-            return { provider, status: 'unavailable', rows: [] }
           }
-        })().then((result) => {
-          if (result.status === 'limited' || result.status === 'unavailable')
-            cache.delete(queryKey)
-          return result
-        }).finally(() => {
-          if (settings.unlimited) cache.delete(queryKey)
-        })
-        for (const [key, value] of cache)
-          if (value.expires <= now) cache.delete(key)
-        cache.set(queryKey, {
-          expires: settings.unlimited ? Infinity : now + settings.refreshMs,
-          result,
-        })
-        return result
-      }),
-    )
+        }
+        if (source.blockedUntil > now)
+          return { provider, status: 'blocked', rows: [] }
+        if (!settings.unlimited) {
+          source.sent = source.sent.filter((time) => time > now - day)
+          if (
+            source.nextRequest > now ||
+            source.sent.length >= settings.maxPerDay ||
+            source.sent.filter((time) => time > now - 60_000).length >=
+              settings.maxPerMinute
+          )
+            return { provider, status: 'limited', rows: [] }
+          source.nextRequest = now + settings.minIntervalMs
+          source.sent.push(now)
+        }
+        if (
+          !settings.unlimited &&
+          reserve &&
+          !(await reserve(provider, queryKey, now, settings))
+        ) {
+          cache.delete(queryKey)
+          source.sent = source.sent.filter((time) => time !== now)
+          return { provider, status: 'limited', rows: [] }
+        }
+        const html = await read(url, 'text/html,application/xhtml+xml')
+        const parse =
+          provider === 'alza'
+            ? extractLocalAlzaListings
+            : provider === 'bazos'
+              ? extractBazosListings
+              : (html: string) => extractShopListings(html, shopSources.find((shop) => shop.id === provider)!)
+        // Without a supported result card, the response may be an error page.
+        const rows = parse(html)
+          .slice(0, 60)
+          .map((row) => ({
+            ...row,
+            image: settings.imagesAllowed ? row.image : null,
+          }))
+        const observed =
+          !settings.unlimited && retain && rows.length
+            ? await retain(provider, rows, now, settings.refreshMs)
+            : rows
+        const empty = !observed.length && provider !== 'bazos' && isEmptyShopSearch(html)
+        if (!settings.unlimited && persisted && (observed.length || empty))
+          await persisted.set(provider, queryKey, observed, now)
+        return {
+          provider,
+          status: rows.length ? 'live' : empty ? 'empty' : 'unavailable',
+          rows: settings.imagesAllowed
+            ? observed
+            : observed.map((row) => ({ ...row, image: null })),
+        }
+      } catch (error) {
+        if (error instanceof CatalogHttpError && error.status === 403) {
+          source.blockedUntil = Date.now() + settings.refreshMs
+          return { provider, status: 'blocked', rows: [] }
+        }
+        return { provider, status: 'unavailable', rows: [] }
+      }
+    })().then((result) => {
+      if (result.status === 'limited' || result.status === 'unavailable')
+        cache.delete(queryKey)
+      return result
+    }).finally(() => {
+      if (settings.unlimited) cache.delete(queryKey)
+    })
+    for (const [key, value] of cache)
+      if (value.expires <= now) cache.delete(key)
+    cache.set(queryKey, {
+      expires: settings.unlimited ? Infinity : now + settings.refreshMs,
+      result,
+    })
+    return result
   }
+  return Object.assign(
+    (raw: string) => Promise.all(requests(raw).map(({ result }) => result)),
+    { requests },
+  )
 }
 
 const settings = (
@@ -233,6 +254,7 @@ const settings = (
 })
 
 export function imagesAllowed(provider: Provider) {
+  if (shopSources.some((shop) => shop.id === provider)) return true
   return process.env[provider.toUpperCase() + '_SEARCH_IMAGES_ALLOWED'] === '1'
 }
 
@@ -291,7 +313,9 @@ export const retainListings: Retain = async (
     )
     return rows.map((row) => {
       const stored = byId.get(row.id)
-      return stored ? { ...stored, image: row.image ?? stored.image } : row
+      return stored
+        ? { ...stored, image: row.image ?? stored.image, description: row.description }
+        : row
     })
   })
 }
@@ -326,8 +350,17 @@ export const resultCache: ResultCache = {
 export const liveSearch = makeLiveSearch(
   {
     bazos: settings('BAZOS', 60, 300),
+    ...Object.fromEntries(enabledShopSources().map((shop) => [shop.id, {
+      endpoint: shop.endpoint,
+      queryParam: shop.queryParam,
+      minIntervalMs: 2000,
+      maxPerMinute: 30,
+      maxPerDay: 300,
+      refreshMs: hour,
+      imagesAllowed: true,
+    }])),
   },
-  readCatalogUrl,
+  readSearchUrl,
   reserveRequest,
   retainListings,
   resultCache,

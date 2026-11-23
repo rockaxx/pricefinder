@@ -21,9 +21,10 @@ test('search, filter, compare, follow a merchant link, and create a price alert'
   await page.getByLabel('Stav', { exact: true }).selectOption('used')
   await page.getByRole('button', { name: 'Použiť filtre' }).click()
   await expect(page.getByRole('article')).toHaveCount(1)
-  await page
-    .getByRole('heading', { name: 'PlayStation 5 Slim', exact: true })
-    .click()
+  await page.getByRole('article').getByRole('link').filter({
+    has: page.getByRole('heading', { name: 'PlayStation 5 Slim', exact: true }),
+  }).click()
+  await page.waitForURL('**/produkt/' + id)
   await expect(
     page.getByRole('heading', { name: 'Sony PlayStation 5 Slim Disc 1 TB' }),
   ).toBeVisible()
@@ -84,7 +85,8 @@ test('mobile theme, deal filters and meaningful category navigation', async ({
   ).toBeLessThanOrEqual(375)
   await page.getByRole('button', { name: 'Prepnúť farebný režim' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  await page.getByRole('link', { name: 'Herné konzoly', exact: true }).click()
+  await page.getByRole('link', { name: 'Herné konzoly', exact: true }).press('Enter')
+  await page.waitForURL('**/kategoria/konzoly')
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Herné konzoly',
   )

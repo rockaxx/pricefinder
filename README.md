@@ -18,12 +18,39 @@ On PowerShell use `Copy-Item .env.example .env` instead of `cp`. Open [http://lo
 
 ## Admin and merchant feeds
 
-With `BAZOS_SEARCH_ENDPOINT` configured, the search page displays Bazoš offers
-in one results grid beside the filters. Price limits and ascending/descending
-price sorting apply to those listings, including pagination. Alza live search
-and its search links are disabled for now. There is no separate empty catalog
-below the listings. Without a Bazoš endpoint or local search mode, the catalog
-search remains available for imported products and demo data.
+The live search reads public search-result HTML directly from Bazoš and the
+configured electronics retailers. Names, EUR prices including VAT, product
+photos and links appear in one grid. The shop selector, price range and price
+sorting apply before pagination. No separate empty catalog is rendered below
+the live results. With all live sources disabled, catalog search remains
+available for imported products and demo data.
+
+Built-in retail adapters: **NAY, PLANEO, TPD, Andrea Shop, Datacomp,
+ITSK–HENRY, Mironet, MobilPC, Najmobily, Compy, Elektroshock, Danimani,
+Mobilmarket, MADER and HDmobil**. Select their IDs in
+`RETAIL_SEARCH_PROVIDERS` (the example enables all fifteen). These are direct
+HTML scrapers, using each merchant's search form and product cards or embedded
+JSON-LD. They do not obtain prices from Heureka or require affiliate feeds.
+Alza remains disabled. This is not complete coverage of Heureka's shop directory.
+
+`npm run shops:check -- playstation 5` tests all configured sources using the
+same cache and limits as the website. Each source reports actual offer/photo
+counts, an empty search, a request limit or a failed connection independently.
+The page's **Zdroje** panel exposes those statuses and direct search links.
+One shop failing does not remove results from the others.
+
+To add another HTML shop without editing application code, copy
+`merchant-search.example.json` to `merchant-search.local.json`, replace the
+example with its public HTTPS search endpoint, query parameter, permitted
+image hostnames and CSS selectors, then add its unique ID to
+`RETAIL_SEARCH_PROVIDERS` and restart. Select the current consumer price with
+VAT, excluding installment, old and loyalty-only prices. Endpoint and product
+links stay on the configured shop's domain. The configuration is validated;
+duplicate IDs are rejected. `RETAIL_SEARCH_CONFIG` selects another file.
+When deploying, supply this runtime configuration alongside the server; it is
+not included in the application bundle.
+Each source contributes up to 60 offers from its returned search page;
+this does not download its entire product catalog.
 
 For a compact localhost search with name, price and optional photo, set
 `LOCAL_SIMPLE_SEARCH=1` in `.env` and start Next.js on `127.0.0.1`.
@@ -35,9 +62,8 @@ npm run local:import -- bazos "bazos-results.html"
 ```
 
 The import saves only listing fields and adds or updates rows by source ID. Demo
-sources are disabled. The Bazoš search ranks imported Bazoš listings and its
-external link opens the same query directly on Bazoš. Legacy Alza import
-utilities remain separate.
+sources are disabled. Imported real offers remain available when their live
+source is unavailable. Legacy Alza import utilities remain separate.
 
 For live HTML search, copy the source settings from `.env.example` into `.env`
 and restart the server. The example includes the public Bazoš search URL,
@@ -47,11 +73,20 @@ With any required field missing, that source stays disabled. Adjust endpoints
 and limits to your integration terms. `BAZOS_SEARCH_IMAGES_ALLOWED=1` enables
 the source's listing photos; the example enables them. Alza is not included
 in the active live-search configuration.
-The server applies the limits per source, reuses recently fetched
-results, does not follow redirects, and displays only listing names, prices,
+The server applies limits per source, reuses recently fetched results, and
+follows at most three redirects within the same merchant domain, including
+NAY's search-to-category redirect. Public DNS checks run on every connection;
+search HTML is capped at 5 MB. Merchant feeds retain their separate 1 MB cap.
+The search displays listing names, prices,
 source links and any price condition. Locally saved listings are clearly
 labeled and remain available when the live source is unavailable.
 Bazoš request caps are enforced in rolling windows at 60/minute and 300/24 hours.
+For Bazoš intent detection, `LISTING_MODEL_PORT=5056` connects to an
+OpenAI-compatible llama.cpp server on loopback. Run it with a multilingual
+instruction model such as Qwen3-4B-Instruct-2507 and at least 8,192 context
+tokens. The model reads the title and the preview available in Bazoš search
+results. Model failures fall back to checks for explicit buying intent.
+Retail sources use 30/minute, 300/24 hours and a two-second minimum interval.
 Requests for the same normalized search term and updates to an existing
 listing's displayed data are limited to once per hour. The SQLite records
 preserve these limits across restarts. Install the migration with `npm run setup`.

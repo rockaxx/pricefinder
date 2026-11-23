@@ -5,6 +5,7 @@ node_modules/
 !.env.example
 next-env.d.ts
 merchant-sync.local.json
+merchant-search.local.json
 *.db
 *.db-journal
 playwright-report/

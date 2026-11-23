@@ -57,7 +57,11 @@ async function run() {
           url: row.url,
           availability: 'unknown',
           condition: 'unknown',
-          listing: { image: row.image, priceLabel: row.priceLabel ?? null },
+          listing: {
+            image: row.image,
+            priceLabel: row.priceLabel ?? null,
+            ...(row.description && { description: row.description }),
+          },
         }
         await tx.offer.upsert({
           where: { sourceId_externalId: { sourceId, externalId: row.id } },

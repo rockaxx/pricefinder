@@ -1,0 +1,13 @@
+[
+  {
+    "id": "additional-shop",
+    "name": "Additional shop",
+    "endpoint": "https://www.example.com/search",
+    "queryParam": "q",
+    "imageHosts": ["images.example.com"],
+    "cards": ".product-card",
+    "title": "a.product-name",
+    "price": ".price-with-vat",
+    "image": ".product-image img"
+  }
+]

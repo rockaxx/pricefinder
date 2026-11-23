@@ -1,6 +1,7 @@
 import { load } from 'cheerio'
 import { cents } from './domain'
 import { extractAlzaListings } from './alza-listings'
+import { shopPhoto, shopSources } from './shop-sources'
 
 export type LocalListing = {
   id: string
@@ -9,6 +10,7 @@ export type LocalListing = {
   url: string
   image: string | null
   priceLabel?: string | null
+  description?: string
 }
 
 export function providerSearchLinks(query: string) {
@@ -28,7 +30,9 @@ export function providerSearchLinks(query: string) {
   ]
 }
 
-export function listingPhoto(value: unknown, provider: 'alza' | 'bazos') {
+export function listingPhoto(value: unknown, provider: string) {
+  const shop = shopSources.find((shop) => shop.id === provider)
+  if (shop) return shopPhoto(value, shop)
   if (typeof value !== 'string') return null
   try {
     const url = new URL(value)
@@ -59,6 +63,7 @@ export function extractBazosListings(html: string): LocalListing[] {
     const name = title.text().replace(/\s+/gu, ' ').trim()
     const href = title.attr('href')
     if (!name || !href) continue
+    const description = card.find('.popis').first().text().trim().slice(0, 400)
     let url: URL
     try {
       url = new URL(href, 'https://www.bazos.sk')
@@ -92,6 +97,7 @@ export function extractBazosListings(html: string): LocalListing[] {
         card.find('.inzeratynadpis img.obrazek').first().attr('src'),
         'bazos',
       ),
+      ...(description && { description }),
     })
   }
   return [...rows.values()]

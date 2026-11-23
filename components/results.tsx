@@ -21,6 +21,7 @@ export const clean = (query: Query): Record<string, string> =>
       'sort',
       'page',
       'offersPage',
+      'typ',
     ].flatMap((key) => {
       const value = query[key]
       return typeof value === 'string' ? [[key, value.slice(0, 100)]] : []

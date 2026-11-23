@@ -1,5 +1,6 @@
 import { db } from './db'
-import { available, byTotal, cents, relevance, total } from './domain'
+import { available, byTotal, cents, total } from './domain'
+import { productRelevance } from './product-search'
 export const categories = [
   ['konzoly', 'Herné konzoly'],
   ['mobily', 'Mobilné telefóny'],
@@ -55,8 +56,9 @@ export async function search(filters: Record<string, string> = {}) {
     },
     orderBy: { id: 'asc' },
   })
+  const scoreProduct = productRelevance(q)
   const rows = products.flatMap((p) => {
-    const score = relevance(q, p.name)
+    const score = scoreProduct(p.name)
     if (!score) return []
     const offers = p.offers
       .filter((o) => {

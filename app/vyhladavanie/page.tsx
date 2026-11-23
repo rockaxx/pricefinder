@@ -1,6 +1,7 @@
 import { Results, clean, type Query } from '../../components/results'
 import { LocalSearch } from '../../components/local-search'
 import { localSearchMode } from '../../lib/local-search-mode'
+import { enabledShopSources } from '../../lib/shop-sources'
 export const dynamic = 'force-dynamic'
 export const metadata = {
   title: 'Vyhľadávanie',
@@ -13,7 +14,7 @@ export default async function Page({
   searchParams: Promise<Query>
 }) {
   const params = await searchParams
-  if (localSearchMode() || process.env.BAZOS_SEARCH_ENDPOINT?.trim())
+  if (localSearchMode() || process.env.BAZOS_SEARCH_ENDPOINT?.trim() || enabledShopSources().length)
     return (
       <LocalSearch
         query={typeof params.q === 'string' ? params.q : ''}

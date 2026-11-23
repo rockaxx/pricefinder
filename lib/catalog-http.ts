@@ -6,7 +6,7 @@ import { safeUrl } from './importer'
 export const maxCatalogBytes = 1_000_000
 
 export class CatalogHttpError extends Error {
-  constructor(readonly status: number) {
+  constructor(readonly status: number, readonly location?: string) {
     super('Zdroj vrátil stav HTTP ' + status + '.')
   }
 }
@@ -27,7 +27,9 @@ export function isPublicAddress(address: string) {
   )
 }
 
-export async function readCatalogUrl(url: URL, accept: string) {
+export async function readCatalogUrl(url: URL, accept: string, maxBytes = maxCatalogBytes) {
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 5_000_000)
+    throw Error('Neplatný limit veľkosti odpovede zdroja.')
   const signal = AbortSignal.timeout(12000)
   const addresses = await lookup(url.hostname, { all: true }).catch(() => [])
   const address =
@@ -59,17 +61,17 @@ export async function readCatalogUrl(url: URL, accept: string) {
       (res) => {
         if (res.statusCode !== 200) {
           res.destroy()
-          reject(new CatalogHttpError(res.statusCode ?? 0))
+          reject(new CatalogHttpError(res.statusCode ?? 0, res.headers.location))
           return
         }
         if (
           (res.headers['content-encoding'] &&
             res.headers['content-encoding'] !== 'identity') ||
-          Number(res.headers['content-length']) > maxCatalogBytes
+          Number(res.headers['content-length']) > maxBytes
         ) {
           res.destroy()
           reject(
-            Error('Odpoveď zdroja musí byť nekomprimovaná a mať najviac 1 MB.'),
+            Error('Odpoveď zdroja musí byť nekomprimovaná a mať najviac ' + maxBytes + ' bajtov.'),
           )
           return
         }
@@ -78,8 +80,8 @@ export async function readCatalogUrl(url: URL, accept: string) {
         let size = 0
         res.on('data', (chunk: Buffer) => {
           size += chunk.length
-          if (size > maxCatalogBytes) {
-            reject(Error('Odpoveď zdroja môže mať najviac 1 MB.'))
+          if (size > maxBytes) {
+            reject(Error('Odpoveď zdroja môže mať najviac ' + maxBytes + ' bajtov.'))
             res.destroy()
             return
           }

@@ -14,6 +14,7 @@
     "setup": "tsx scripts/setup.ts",
     "alerts": "tsx scripts/alerts.ts",
     "sync:catalog": "tsx scripts/sync-catalog.ts",
+    "shops:check": "tsx scripts/check-shops.ts",
     "scrape:alza": "tsx scripts/scrape-alza.ts",
     "local:alza": "tsx scripts/use-local-alza-snapshot.ts",
     "local:import": "tsx scripts/import-local-listings.ts",

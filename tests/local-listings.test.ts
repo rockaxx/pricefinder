@@ -15,6 +15,7 @@ describe('local Bazoš and Alza search', () => {
         priceCents: 66000,
         url: 'https://pc.bazos.sk/inzerat/197612381/example.php',
         image: null,
+        description: 'Ovládač 50 €',
       },
     ])
     expect(extractBazosListings(html.replace('660 €', 'Dohodou'))).toEqual([])
@@ -23,6 +24,13 @@ describe('local Bazoš and Alza search', () => {
         html.replace('pc.bazos.sk', 'pc.bazos.sk.example.com'),
       ),
     ).toEqual([])
+  })
+  it('extracts the Bazoš description preview even when the title is neutral', () => {
+    const card = (id: number, title: string, description: string) =>
+      `<div class="inzeraty inzeratyflex"><div class="inzeratynadpis"><h2 class="nadpis"><a href="https://pc.bazos.sk/inzerat/${id}/sony-ps5.php">${title}</a></h2><div class="popis">${description}</div></div><div class="inzeratycena">300 €</div></div>`
+    const description = 'Kupim konzolu Sony PlayStation 5 s ovládačom DualSense.'
+    const [listing] = extractBazosListings(card(197822843, 'Sony PlayStation 5', description))
+    expect(listing).toMatchObject({ id: '197822843', description })
   })
   it('keeps arbitrary text in the search parameter', () => {
     const [bazos] = providerSearchLinks('iPhone & MacBook')
